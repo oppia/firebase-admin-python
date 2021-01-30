@@ -343,7 +343,7 @@ class _JWTVerifier(object):
         key_id = header.get('kid')
         algorithm = header.get('alg')
         if not key_id:
-            if algorithm == 'HS256' and payload.get('v') is 0 and 'uid' in payload.get('d', {}):
+            if algorithm == 'HS256' and payload.get('v') == 0 and 'uid' in payload.get('d', {}):
                 raise self._invalid_token_error(
                     '{0} expects {1}, but was given a legacy custom '
                     'token.'.format(self.operation, self.articled_short_name))
