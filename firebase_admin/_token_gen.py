@@ -306,13 +306,14 @@ class _JWTVerifier(object):
         header, payload = self._decode_unverified(token)
 
         self._verify_aud(payload)
-        if not _auth_utils.is_emulator_enabled():
-            self._verify_kid_and_alg(header, payload)
         self._verify_iss(payload)
         self._verify_sub(payload)
+
         if not _auth_utils.is_emulator_enabled():
+            self._verify_kid_and_alg(header, payload)
             self._verify_token_signature(token, request)
         else:
+            # Normally, _verify_token_signature handles "iat" and "exp" verification.
             self._verify_iat_and_exp(payload)
 
         payload['uid'] = payload['sub']
@@ -378,23 +379,24 @@ class _JWTVerifier(object):
                 '{1}'.format(self.short_name, self.verify_id_token_msg))
 
     def _verify_iat_and_exp(self, payload):
-        if 'iat' not in payload:
-            raise self._invalid_token_error('Token does not contain required claim "iat"')
-        if 'exp' not in payload:
-            raise self._invalid_token_error('Token does not contain required claim "exp"')
+        issued_at = payload.get('iat')
+        expires_at = payload.get('exp')
         now = calendar.timegm(datetime.datetime.utcnow().utctimetuple())
-        if now < payload['iat'] - _CLOCK_SKEW_SECS:
+        if not issued_at:
+            raise self._invalid_token_error('Token does not contain required claim "iat"')
+        elif not expires_at:
+            raise self._invalid_token_error('Token does not contain required claim "exp"')
+        elif now < issued_at - _CLOCK_SKEW_SECS:
             raise self._invalid_token_error(
-                'Token used too early, {0} < {1}'.format(now, payload['iat']))
-        if now > payload['exp'] + _CLOCK_SKEW_SECS:
+                'Token used too early, {0} < {1}'.format(now, issued_at))
+        elif now > expires_at + _CLOCK_SKEW_SECS:
             raise self._expired_token_error(
-                'Token expired, {0} < {1}'.format(payload['exp'], now), cause=None)
+                'Token expired, {0} < {1}'.format(expires_at, now), cause=None)
 
     def _verify_token_signature(self, token, request):
         try:
-            verified_claims = google.oauth2.id_token.verify_token(
+            return google.oauth2.id_token.verify_token(
                 token, request=request, audience=self.project_id, certs_url=self.cert_url)
-            return verified_claims
         except google.auth.exceptions.TransportError as error:
             raise CertificateFetchError(str(error), cause=error)
         except ValueError as error:
