@@ -288,37 +288,6 @@ class _JWTVerifier(object):
     def expected_issuer(self):
         return self.issuer + self.project_id
 
-    def verify(self, token, request):
-        """Verifies the signature and data for the provided JWT."""
-        token = token.encode('utf-8') if isinstance(token, six.text_type) else token
-        if not isinstance(token, six.binary_type) or not token:
-            raise ValueError(
-                'Illegal {0} provided: {1}. {0} must be a non-empty '
-                'string.'.format(self.short_name, token))
-
-        if not self.project_id:
-            raise ValueError(
-                'Failed to ascertain project ID from the credential or the environment. Project '
-                'ID is required to call {0}. Initialize the app with a credentials.Certificate '
-                'or set your Firebase project ID as an app option. Alternatively set the '
-                'GOOGLE_CLOUD_PROJECT environment variable.'.format(self.operation))
-
-        header, payload = self._decode_unverified(token)
-
-        self._verify_aud(payload)
-        self._verify_iss(payload)
-        self._verify_sub(payload)
-
-        if not _auth_utils.is_emulator_enabled():
-            self._verify_kid_and_alg(header, payload)
-            self._verify_token_signature(token, request)
-        else:
-            # Normally, _verify_token_signature handles "iat" and "exp" verification.
-            self._verify_iat_and_exp(payload)
-
-        payload['uid'] = payload['sub']
-        return payload
-
     def _decode_unverified(self, token):
         try:
             header = jwt.decode_header(token)
@@ -403,6 +372,37 @@ class _JWTVerifier(object):
             error_factory = (self._expired_token_error if 'Token expired' in str(error) else
                              self._invalid_token_error)
             raise error_factory(str(error), cause=error)
+
+    def verify(self, token, request):
+        """Verifies the signature and data for the provided JWT."""
+        token = token.encode('utf-8') if isinstance(token, six.text_type) else token
+        if not isinstance(token, six.binary_type) or not token:
+            raise ValueError(
+                'Illegal {0} provided: {1}. {0} must be a non-empty '
+                'string.'.format(self.short_name, token))
+
+        if not self.project_id:
+            raise ValueError(
+                'Failed to ascertain project ID from the credential or the environment. Project '
+                'ID is required to call {0}. Initialize the app with a credentials.Certificate '
+                'or set your Firebase project ID as an app option. Alternatively set the '
+                'GOOGLE_CLOUD_PROJECT environment variable.'.format(self.operation))
+
+        header, payload = self._decode_unverified(token)
+
+        self._verify_aud(payload)
+        self._verify_iss(payload)
+        self._verify_sub(payload)
+
+        if not _auth_utils.is_emulator_enabled():
+            self._verify_kid_and_alg(header, payload)
+            self._verify_token_signature(token, request)
+        else:
+            # Normally, _verify_token_signature handles "iat" and "exp" verification.
+            self._verify_iat_and_exp(payload)
+
+        payload['uid'] = payload['sub']
+        return payload
 
 
 class TokenSignError(exceptions.UnknownError):
