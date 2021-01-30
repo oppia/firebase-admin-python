@@ -15,6 +15,7 @@
 """Firebase auth utils."""
 
 import json
+import os
 import re
 
 import six
@@ -30,6 +31,22 @@ RESERVED_CLAIMS = set([
     'iss', 'jti', 'nbf', 'nonce', 'sub', 'firebase',
 ])
 VALID_EMAIL_ACTION_TYPES = set(['VERIFY_EMAIL', 'EMAIL_SIGNIN', 'PASSWORD_RESET'])
+
+# The Firebase Auth backend base URL format.
+FIREBASE_AUTH_BASE_URL_FORMAT = (
+    'https://identitytoolkit.googleapis.com/{version}/projects/{project_id}{api}')
+
+# Firebase Auth base URL format when using the auth emultor.
+FIREBASE_AUTH_EMULATOR_BASE_URL_FORMAT = (
+    'http://{host}/identitytoolkit.googleapis.com/{version}/projects/{project_id}{api}')
+
+# The Firebase Auth backend multi-tenancy base URL format.
+FIREBASE_AUTH_TENANT_URL_FORMAT = FIREBASE_AUTH_BASE_URL_FORMAT.replace(
+    'projects/{project_id}', 'projects/{project_id}/tenants/{tenant_id}')
+
+# Firebase Auth base URL format when using the auth emultor with multi-tenancy.
+FIREBASE_AUTH_EMULATOR_TENANT_URL_FORMAT = FIREBASE_AUTH_EMULATOR_BASE_URL_FORMAT.replace(
+    'projects/{project_id}', 'projects/{project_id}/tenants/{tenant_id}')
 
 
 def validate_uid(uid, required=False):
@@ -323,3 +340,72 @@ def _build_error_message(code, exc_type, custom_message):
         exc_type and hasattr(exc_type, 'default_message')) else 'Error while calling Auth service'
     ext = ' {0}'.format(custom_message) if custom_message else ''
     return '{0} ({1}).{2}'.format(default_message, code, ext)
+
+
+def emulator_host():
+    return os.environ.get('FIREBASE_AUTH_EMULATOR_HOST')
+
+
+def is_emulator_enabled():
+    return bool(emulator_host())
+
+
+class AuthResourceUrlBuilder(object):
+    """Utility class to help building resource URLs."""
+
+    def __init__(self, project_id, version='v1'):
+        """The resource URL builder constructor.
+
+        Args:
+            project_id: The resource project ID.
+            version: The endpoint API version.
+        """
+        self.project_id = project_id
+        self.version = version
+        self._url_format = (
+            FIREBASE_AUTH_EMULATOR_BASE_URL_FORMAT.format(host=emulator_host())
+            if is_emulator_enabled() else FIREBASE_AUTH_BASE_URL_FORMAT)
+
+    def get_url(self, api='', **params):
+        """Returns the resource URL corresponding to the provided parameters.
+
+        Args:
+            api: The backend API name (optional).
+            **params: The optional additional parameters to substitute in the URL path.
+
+        Returns:
+            string: The corresponding resource URL.
+        """
+        return self._url_format.format(
+            api=api, project_id=self.project_id, version=self.version, **params)
+
+
+class TenantAwareAuthResourceUrlBuilder(AuthResourceUrlBuilder):
+    """Tenant aware resource builder utility."""
+
+    def __init__(self, project_id, version, tenant_id):
+        """The tenant aware resource URL builder constructor.
+
+        Args:
+            project_id: The resource project ID.
+            version: The endpoint API version.
+            tenant_id: The tenant ID.
+        """
+        super(TenantAwareAuthResourceUrlBuilder, self).__init__(project_id, version)
+        self.tenant_id = tenant_id
+        self._url_format = (
+            FIREBASE_AUTH_EMULATOR_TENANT_URL_FORMAT.format(host=emulator_host())
+            if is_emulator_enabled() else FIREBASE_AUTH_TENANT_URL_FORMAT)
+
+    def get_url(self, api='', **params):
+        """Returns the resource URL corresponding to the provided parameters.
+
+        Args:
+            api: The backend API name (optional).
+            **params: The optional additional parameters to substitute in the URL path.
+
+        Returns:
+            string: The corresponding resource URL.
+        """
+        return super(TenantAwareAuthResourceUrlBuilder, self).get_url(
+            api=api, tenant_id=self.tenant_id, **params)
