@@ -34,12 +34,7 @@ from firebase_admin import exceptions
 from firebase_admin import _auth_utils
 
 
-# ID token constants
-ID_TOKEN_CERT_URI = ('https://www.googleapis.com/robot/v1/metadata/x509/'
-                     'securetoken@system.gserviceaccount.com')
-
 # Session cookie constants
-COOKIE_ISSUER_PREFIX = 'https://session.firebase.google.com/'
 MIN_SESSION_COOKIE_DURATION_SECONDS = int(datetime.timedelta(minutes=5).total_seconds())
 MAX_SESSION_COOKIE_DURATION_SECONDS = int(datetime.timedelta(days=14).total_seconds())
 
@@ -236,7 +231,7 @@ class TokenVerifier(object):
             project_id=app.project_id, short_name='ID token',
             operation='verify_id_token()',
             doc_url='https://firebase.google.com/docs/auth/admin/verify-id-tokens',
-            cert_url=ID_TOKEN_CERT_URI,
+            cert_url=_auth_utils.get_token_cert_url(),
             issuer=_auth_utils.get_token_issuer(),
             invalid_token_error=_auth_utils.InvalidIdTokenError,
             expired_token_error=ExpiredIdTokenError)
@@ -245,7 +240,7 @@ class TokenVerifier(object):
             operation='verify_session_cookie()',
             doc_url='https://firebase.google.com/docs/auth/admin/verify-id-tokens',
             cert_url=_auth_utils.get_cookie_cert_url('/relyingparty'),
-            issuer=COOKIE_ISSUER_PREFIX,
+            issuer=_auth_utils.get_cookie_issuer(),
             invalid_token_error=InvalidSessionCookieError,
             expired_token_error=ExpiredSessionCookieError)
 
