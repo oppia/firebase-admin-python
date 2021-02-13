@@ -243,7 +243,7 @@ class TokenVerifier(object):
             project_id=app.project_id, short_name='session cookie',
             operation='verify_session_cookie()',
             doc_url='https://firebase.google.com/docs/auth/admin/verify-id-tokens',
-            cert_url=_auth_utils.get_cookie_cert_url('/relyingparty'),
+            cert_url=_auth_utils.get_cookie_cert_url(),
             issuer=COOKIE_ISSUER_PREFIX,
             invalid_token_error=InvalidSessionCookieError,
             expired_token_error=ExpiredSessionCookieError)

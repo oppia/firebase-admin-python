@@ -32,6 +32,8 @@ RESERVED_CLAIMS = set([
 ])
 VALID_EMAIL_ACTION_TYPES = set(['VERIFY_EMAIL', 'EMAIL_SIGNIN', 'PASSWORD_RESET'])
 
+_EMULATOR_HOST_ENV_VAR = 'FIREBASE_AUTH_EMULATOR_HOST'
+
 
 def validate_uid(uid, required=False):
     if uid is None and not required:
@@ -327,7 +329,10 @@ def _build_error_message(code, exc_type, custom_message):
 
 
 def emulator_host():
-    return os.environ.get('FIREBASE_AUTH_EMULATOR_HOST')
+    env_val = os.environ.get(_EMULATOR_HOST_ENV_VAR)
+    if env_val and '//' not in env_val:
+        return 'http://{0}/'.format(env_val)
+    return None
 
 
 def is_emulator_enabled():
@@ -336,30 +341,18 @@ def is_emulator_enabled():
 
 def get_cookie_cert_url(version='v3'):
     path = '/identitytoolkit/{0}/relyingparty'.format(version)
-    protocol = 'http://{0}/'.format(emulator_host()) if is_emulator_enabled() else 'https://'
+    protocol = emulator_host() if is_emulator_enabled() else 'https://'
     return '{0}www.googleapis.com{1}'.format(protocol, path)
 
 
 def get_token_cert_url(version='v1'):
     path = '/robot/{0}/metadata/x509/securetoken@system.gserviceaccount.com'.format(version)
-    protocol = 'http://{0}/'.format(emulator_host()) if is_emulator_enabled() else 'https://'
+    protocol = emulator_host() if is_emulator_enabled() else 'https://'
     return '{0}www.googleapis.com{1}'.format(protocol, path)
-
-
-def get_cookie_issuer():
-    path = '/'
-    protocol = 'http://{0}/'.format(emulator_host()) if is_emulator_enabled() else 'https://'
-    return '{0}session.firebase.google.com{1}'.format(protocol, path)
-
-
-def get_token_issuer():
-    path = '/'
-    protocol = 'http://{0}/'.format(emulator_host()) if is_emulator_enabled() else 'https://'
-    return '{0}securetoken.google.com{1}'.format(protocol, path)
 
 
 def get_auth_resource_url(project_id, version='v1', tenant_id=None):
     path = ('/{0}/projects/{1}'.format(version, project_id) if tenant_id is None else
             '/{0}/projects/{1}/tenants/{2}'.format(version, project_id, tenant_id))
-    protocol = 'http://{0}/'.format(emulator_host()) if is_emulator_enabled() else 'https://'
+    protocol = emulator_host() if is_emulator_enabled() else 'https://'
     return '{0}identitytoolkit.googleapis.com{1}'.format(protocol, path)
