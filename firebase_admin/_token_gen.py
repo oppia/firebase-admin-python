@@ -369,9 +369,9 @@ class _JWTVerifier(object):
         except google.auth.exceptions.TransportError as error:
             raise CertificateFetchError(str(error), cause=error)
         except ValueError as error:
-            error_factory = (self._expired_token_error if 'Token expired' in str(error) else
-                             self._invalid_token_error)
-            raise error_factory(str(error), cause=error)
+            if 'Token expired' in str(error):
+                raise self._expired_token_error(str(error), cause=error)
+            raise self._invalid_token_error(str(error), cause=error)
 
     def verify(self, token, request):
         """Verifies the signature and data for the provided JWT."""
