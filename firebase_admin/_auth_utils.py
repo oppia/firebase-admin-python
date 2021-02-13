@@ -34,19 +34,7 @@ VALID_EMAIL_ACTION_TYPES = set(['VERIFY_EMAIL', 'EMAIL_SIGNIN', 'PASSWORD_RESET'
 
 # The Firebase Auth backend base URL format.
 FIREBASE_AUTH_BASE_URL_FORMAT = (
-    'https://identitytoolkit.googleapis.com/{version}/projects/{project_id}{api}')
-
-# Firebase Auth base URL format when using the auth emultor.
-FIREBASE_AUTH_EMULATOR_BASE_URL_FORMAT = (
-    'http://{host}/identitytoolkit.googleapis.com/{version}/projects/{project_id}{api}')
-
-# The Firebase Auth backend multi-tenancy base URL format.
-FIREBASE_AUTH_TENANT_URL_FORMAT = FIREBASE_AUTH_BASE_URL_FORMAT.replace(
-    'projects/{project_id}', 'projects/{project_id}/tenants/{tenant_id}')
-
-# Firebase Auth base URL format when using the auth emultor with multi-tenancy.
-FIREBASE_AUTH_EMULATOR_TENANT_URL_FORMAT = FIREBASE_AUTH_EMULATOR_BASE_URL_FORMAT.replace(
-    'projects/{project_id}', 'projects/{project_id}/tenants/{tenant_id}')
+    'identitytoolkit.googleapis.com/{version}/projects/{project_id}{api}')
 
 
 def validate_uid(uid, required=False):
@@ -362,9 +350,9 @@ class AuthResourceUrlBuilder(object):
         """
         self.project_id = project_id
         self.version = version
-        self._url_format = (
-            FIREBASE_AUTH_EMULATOR_BASE_URL_FORMAT.format(host=emulator_host())
-            if is_emulator_enabled() else FIREBASE_AUTH_BASE_URL_FORMAT)
+        self._url_format = '{0}{1}'.format(
+            'http://{0}/'.format(emulator_host()) if is_emulator_enabled() else 'https://',
+            FIREBASE_AUTH_BASE_URL_FORMAT)
 
     def get_url(self, api='', **params):
         """Returns the resource URL corresponding to the provided parameters.
@@ -378,34 +366,3 @@ class AuthResourceUrlBuilder(object):
         """
         return self._url_format.format(
             api=api, project_id=self.project_id, version=self.version, **params)
-
-
-class TenantAwareAuthResourceUrlBuilder(AuthResourceUrlBuilder):
-    """Tenant aware resource builder utility."""
-
-    def __init__(self, project_id, version, tenant_id):
-        """The tenant aware resource URL builder constructor.
-
-        Args:
-            project_id: The resource project ID.
-            version: The endpoint API version.
-            tenant_id: The tenant ID.
-        """
-        super(TenantAwareAuthResourceUrlBuilder, self).__init__(project_id, version)
-        self.tenant_id = tenant_id
-        self._url_format = (
-            FIREBASE_AUTH_EMULATOR_TENANT_URL_FORMAT.format(host=emulator_host())
-            if is_emulator_enabled() else FIREBASE_AUTH_TENANT_URL_FORMAT)
-
-    def get_url(self, api='', **params):
-        """Returns the resource URL corresponding to the provided parameters.
-
-        Args:
-            api: The backend API name (optional).
-            **params: The optional additional parameters to substitute in the URL path.
-
-        Returns:
-            string: The corresponding resource URL.
-        """
-        return super(TenantAwareAuthResourceUrlBuilder, self).get_url(
-            api=api, tenant_id=self.tenant_id, **params)
