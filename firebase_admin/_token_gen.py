@@ -56,14 +56,14 @@ RESERVED_CLAIMS = set([
 METADATA_SERVICE_URL = ('http://metadata.google.internal/computeMetadata/v1/instance/'
                         'service-accounts/default/email')
 
-_CLOCK_SKEW_SECS = 10  # 10 seconds
+_CLOCK_SKEW_SECS = 10
 
 
 class _EmulatedSigner(crypt.Signer):
 
     @property
     def key_id(self):
-        return None
+        return b''
 
     def sign(self, unused_message):
         return b''

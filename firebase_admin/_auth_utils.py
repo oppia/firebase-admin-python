@@ -14,7 +14,6 @@
 
 """Firebase auth utils."""
 
-import collections
 import json
 import os
 import re
