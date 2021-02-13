@@ -334,6 +334,18 @@ def is_emulator_enabled():
     return bool(emulator_host())
 
 
+def get_cookie_cert_url(api='', version='v3'):
+    path = '/identitytoolkit/{0}/relyingparty'.format(version)
+    protocol = 'http://{0}/'.format(emulator_host()) if is_emulator_enabled() else 'https://'
+    return '{0}www.googleapis.com{1}{2}'.format(protocol, path, api)
+
+
+def get_token_issuer(api='', version='v1'):
+    path = '/{0}/token'.format(version)
+    protocol = 'http://{0}/'.format(emulator_host()) if is_emulator_enabled() else 'https://'
+    return '{0}securetoken.googleapis.com{1}{2}'.format(protocol, path, api)
+
+
 def get_auth_resource_url(project_id, version='v1', api='', tenant_id=None):
     path = ('/{0}/projects/{1}'.format(version, project_id) if tenant_id is None else
             '/{0}/projects/{1}/tenants/{2}'.format(version, project_id, tenant_id))
