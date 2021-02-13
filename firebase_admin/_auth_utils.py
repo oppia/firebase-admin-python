@@ -14,6 +14,7 @@
 
 """Firebase auth utils."""
 
+import collections
 import json
 import os
 import re
@@ -31,10 +32,6 @@ RESERVED_CLAIMS = set([
     'iss', 'jti', 'nbf', 'nonce', 'sub', 'firebase',
 ])
 VALID_EMAIL_ACTION_TYPES = set(['VERIFY_EMAIL', 'EMAIL_SIGNIN', 'PASSWORD_RESET'])
-
-# The Firebase Auth backend base URL format.
-FIREBASE_AUTH_BASE_URL_FORMAT = (
-    'identitytoolkit.googleapis.com/{version}/projects/{project_id}{api}')
 
 
 def validate_uid(uid, required=False):
@@ -338,31 +335,8 @@ def is_emulator_enabled():
     return bool(emulator_host())
 
 
-class AuthResourceUrlBuilder(object):
-    """Utility class to help building resource URLs."""
-
-    def __init__(self, project_id, version='v1'):
-        """The resource URL builder constructor.
-
-        Args:
-            project_id: The resource project ID.
-            version: The endpoint API version.
-        """
-        self.project_id = project_id
-        self.version = version
-        self._url_format = '{0}{1}'.format(
-            'http://{0}/'.format(emulator_host()) if is_emulator_enabled() else 'https://',
-            FIREBASE_AUTH_BASE_URL_FORMAT)
-
-    def get_url(self, api='', **params):
-        """Returns the resource URL corresponding to the provided parameters.
-
-        Args:
-            api: The backend API name (optional).
-            **params: The optional additional parameters to substitute in the URL path.
-
-        Returns:
-            string: The corresponding resource URL.
-        """
-        return self._url_format.format(
-            api=api, project_id=self.project_id, version=self.version, **params)
+def get_auth_resource_url(project_id, version='v1', api='', tenant_id=None):
+    path = ('/{0}/projects/{1}'.format(version, project_id) if tenant_id is None else
+            '/{0}/projects/{1}/tenants/{2}'.format(version, project_id, tenant_id))
+    protocol = 'http://{0}/'.format(emulator_host()) if is_emulator_enabled() else 'https://'
+    return '{0}identitytoolkit.googleapis.com{1}{2}'.format(protocol, path, api)

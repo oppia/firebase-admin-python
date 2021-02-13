@@ -555,10 +555,8 @@ class _AuthService(object):
             2. set the project ID explicitly via Firebase App options, or
             3. set the project ID via the GOOGLE_CLOUD_PROJECT environment variable.""")
 
-        self.url_builder = _auth_utils.AuthResourceUrlBuilder(app.project_id)
-
         client = _http_client.JsonHttpClient(
-            credential=credential, base_url=self.url_builder.get_url(),
+            credential=credential, base_url=_auth_utils.get_auth_resource_url(app.project_id),
             headers={'X-Client-Version': version_header})
         self._token_generator = _token_gen.TokenGenerator(app, client)
         self._token_verifier = _token_gen.TokenVerifier(app)

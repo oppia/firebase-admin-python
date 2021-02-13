@@ -394,12 +394,14 @@ class _JWTVerifier(object):
         self._verify_iss(payload)
         self._verify_sub(payload)
 
-        if not _auth_utils.is_emulator_enabled():
+        if _auth_utils.is_emulator_enabled():
+            # NOTE: `_verify_token_signature` handles `iat` and `exp` verification as a byproduct,
+            # but we do not want to check signatures while running in emulator-mode so we explicitly
+            # check `iat` and `exp` ourselves instead.
+            self._verify_iat_and_exp(payload)
+        else:
             self._verify_kid_and_alg(header, payload)
             self._verify_token_signature(token, request)
-        else:
-            # Normally, _verify_token_signature handles "iat" and "exp" verification.
-            self._verify_iat_and_exp(payload)
 
         payload['uid'] = payload['sub']
         return payload
