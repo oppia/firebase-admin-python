@@ -339,14 +339,14 @@ def is_emulator_enabled():
     return bool(emulator_host())
 
 
-def get_cookie_cert_url(version='v3'):
-    path = '/identitytoolkit/{0}/relyingparty'.format(version)
+def get_token_cert_url(version='v1'):
+    path = '/robot/{0}/metadata/x509/securetoken@system.gserviceaccount.com'.format(version)
     protocol = emulator_host() if is_emulator_enabled() else 'https://'
     return '{0}www.googleapis.com{1}'.format(protocol, path)
 
 
-def get_token_cert_url(version='v1'):
-    path = '/robot/{0}/metadata/x509/securetoken@system.gserviceaccount.com'.format(version)
+def get_cookie_cert_url(version='v3'):
+    path = '/identitytoolkit/{0}/relyingparty/publicKeys'.format(version)
     protocol = emulator_host() if is_emulator_enabled() else 'https://'
     return '{0}www.googleapis.com{1}'.format(protocol, path)
 
