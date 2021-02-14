@@ -34,7 +34,6 @@ VALID_EMAIL_ACTION_TYPES = set(['VERIFY_EMAIL', 'EMAIL_SIGNIN', 'PASSWORD_RESET'
 
 _EMULATOR_HOST_ENV_VAR = 'FIREBASE_AUTH_EMULATOR_HOST'
 
-
 def validate_uid(uid, required=False):
     if uid is None and not required:
         return None
@@ -339,19 +338,19 @@ def is_emulator_enabled():
     return bool(emulator_host())
 
 
-def get_token_cert_url(version='v1'):
-    path = '/robot/{0}/metadata/x509/securetoken@system.gserviceaccount.com'.format(version)
-    protocol = emulator_host() if is_emulator_enabled() else 'https://'
-    return '{0}www.googleapis.com{1}'.format(protocol, path)
-
-
 def get_cookie_cert_url(version='v3'):
     path = '/identitytoolkit/{0}/relyingparty/publicKeys'.format(version)
     protocol = emulator_host() if is_emulator_enabled() else 'https://'
     return '{0}www.googleapis.com{1}'.format(protocol, path)
 
 
-def get_auth_resource_url(project_id, version='v1', tenant_id=None):
+def get_id_token_cert_url(version='v1'):
+    path = '/robot/{0}/metadata/x509/securetoken@system.gserviceaccount.com'.format(version)
+    protocol = emulator_host() if is_emulator_enabled() else 'https://'
+    return '{0}www.googleapis.com{1}'.format(protocol, path)
+
+
+def get_auth_resource_url(project_id, tenant_id=None, version='v1'):
     path = ('/{0}/projects/{1}'.format(version, project_id) if tenant_id is None else
             '/{0}/projects/{1}/tenants/{2}'.format(version, project_id, tenant_id))
     protocol = emulator_host() if is_emulator_enabled() else 'https://'

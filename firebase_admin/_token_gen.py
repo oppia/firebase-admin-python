@@ -60,7 +60,7 @@ class _EmulatedSigner(crypt.Signer):
 
     @property
     def key_id(self):
-        return b''
+        return None
 
     def sign(self, unused_message):
         return b''
@@ -90,10 +90,6 @@ class _SigningProvider(object):
         signer = iam.Signer(request, google_cred, service_account)
         return _SigningProvider(signer, service_account)
 
-    @classmethod
-    def emulated(cls):
-        return _SigningProvider(_EmulatedSigner(), 'firebase-auth-emulator@example.com')
-
 
 class TokenGenerator(object):
     """Generates custom tokens and session cookies."""
@@ -107,7 +103,7 @@ class TokenGenerator(object):
     def _init_signing_provider(self):
         """Initializes a signing provider by following the go/firebase-admin-sign protocol."""
         if _auth_utils.is_emulator_enabled():
-            return _SigningProvider.emulated()
+            return _SigningProvider(_EmulatedSigner(), 'firebase-auth-emulator@example.com')
 
         # If the SDK was initialized with a service account, use it to sign bytes.
         google_cred = self.app.credential.get_credential()
@@ -235,7 +231,7 @@ class TokenVerifier(object):
             project_id=app.project_id, short_name='ID token',
             operation='verify_id_token()',
             doc_url='https://firebase.google.com/docs/auth/admin/verify-id-tokens',
-            cert_url=_auth_utils.get_token_cert_url(),
+            cert_url=_auth_utils.get_id_token_cert_url(),
             issuer=ID_TOKEN_ISSUER_PREFIX,
             invalid_token_error=_auth_utils.InvalidIdTokenError,
             expired_token_error=ExpiredIdTokenError)
