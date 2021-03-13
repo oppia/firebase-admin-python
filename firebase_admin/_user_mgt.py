@@ -386,6 +386,21 @@ class ActionCodeSettings(object):
         self.android_minimum_version = android_minimum_version
 
 
+class BatchDeleteAccountsResponse(object):
+    """Represents the results of a `delete_users()` call."""
+
+    def __init__(self, errors=None):
+        """Constructs a `BatchDeleteAccountsResponse` instance, corresponding to
+        the JSON representing the `BatchDeleteAccountsResponse` proto.
+
+        Args:
+            errors: List of dictionaries, with each dictionary representing an
+                `ErrorInfo` instance as returned by the server. `None` implies
+                an empty list.
+        """
+        self.errors = [_user_import.ErrorInfo(err) for err in errors] if errors else []
+
+
 def encode_action_code_settings(settings):
     """ Validates the provided action code settings for email link generation and
     populates the REST api parameters.
@@ -594,6 +609,42 @@ class UserManager(object):
             if not body or not body.get('kind'):
                 raise _auth_utils.UnexpectedResponseError(
                     'Failed to delete user: {0}.'.format(uid), http_response=http_resp)
+
+    def delete_users(self, uids, force_delete=False):
+        """Deletes the users identified by the specified user ids.
+
+        Args:
+            uids: A list of strings indicating the uids of the users to be deleted.
+                Must have <= 1000 entries.
+            force_delete: Optional parameter that indicates if users should be
+                deleted, even if they're not disabled. Defaults to False.
+
+
+        Returns:
+            BatchDeleteAccountsResponse: Server's proto response, wrapped in a
+            python object.
+
+        Raises:
+            ValueError: If any of the identifiers are invalid or if more than 1000
+                identifiers are specified.
+            UnexpectedResponseError: If the backend server responds with an
+                unexpected message.
+        """
+        if not uids:
+            return BatchDeleteAccountsResponse()
+
+        if len(uids) > 1000:
+            raise ValueError("`uids` paramter must have <= 1000 entries.")
+        for uid in uids:
+            _auth_utils.validate_uid(uid, required=True)
+
+        body, http_resp = self._client.body_and_response(
+                'post', '/accounts:batchDelete', json={'localIds': uids, 'force': force_delete})
+        if not isinstance(body, dict):
+            raise _auth_utils.UnexpectedResponseError(
+                'Unexpected response from server while attempting to delete users.',
+                http_response=http_resp)
+        return BatchDeleteAccountsResponse(body.get('errors', []))
 
     def import_users(self, users, hash_alg=None):
         """Imports the given list of users to Firebase Auth."""
