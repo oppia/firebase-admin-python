@@ -619,7 +619,6 @@ class UserManager(object):
             force_delete: Optional parameter that indicates if users should be
                 deleted, even if they're not disabled. Defaults to False.
 
-
         Returns:
             BatchDeleteAccountsResponse: Server's proto response, wrapped in a
             python object.
@@ -639,7 +638,7 @@ class UserManager(object):
             _auth_utils.validate_uid(uid, required=True)
 
         body, http_resp = self._client.body_and_response(
-                'post', '/accounts:batchDelete', json={'localIds': uids, 'force': force_delete})
+            'post', '/accounts:batchDelete', json={'localIds': uids, 'force': force_delete})
         if not isinstance(body, dict):
             raise _auth_utils.UnexpectedResponseError(
                 'Unexpected response from server while attempting to delete users.',

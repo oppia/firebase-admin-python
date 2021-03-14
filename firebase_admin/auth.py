@@ -35,6 +35,7 @@ _AUTH_ATTRIBUTE = '_auth'
 
 __all__ = [
     'ActionCodeSettings',
+    'BatchDeleteAccountsResponse',
     'CertificateFetchError',
     'DELETE_ATTRIBUTE',
     'EmailAlreadyExistsError',
@@ -83,6 +84,7 @@ __all__ = [
 ]
 
 ActionCodeSettings = _user_mgt.ActionCodeSettings
+BatchDeleteAccountsResponse = _user_mgt.BatchDeleteAccountsResponse
 CertificateFetchError = _token_gen.CertificateFetchError
 DELETE_ATTRIBUTE = _user_mgt.DELETE_ATTRIBUTE
 EmailAlreadyExistsError = _auth_utils.EmailAlreadyExistsError
@@ -445,14 +447,14 @@ def delete_user(uid, app=None):
 
 
 def delete_users(uids, force_delete=False, app=None):
-    """Deletes the users specified by the given identifiers.
+    """Deletes the users identified by the specified user ids.
 
     Deleting a non-existing user does not generate an error (the method is
     idempotent.) Non-existing users are considered to be successfully deleted
     and are therefore included in the `DeleteUserResult.success_count` value.
 
-    A maximum of 1000 identifiers may be supplied. If more than 1000
-    identifiers are supplied, this method raises a `ValueError`.
+    A maximum of 1000 identifiers may be supplied. If more than 1000 identifiers
+    are supplied, this method raises a `ValueError`.
 
     Args:
         uids: A list of strings indicating the uids of the users to be deleted.
@@ -462,12 +464,14 @@ def delete_users(uids, force_delete=False, app=None):
         app: An App instance (optional).
 
     Returns:
-        DeleteUsersResult: The total number of successful/failed deletions, as
-        well as the array of errors that correspond to the failed deletions.
+        BatchDeleteAccountsResponse: Server's proto response, wrapped in a
+        python object.
 
     Raises:
         ValueError: If any of the identifiers are invalid or if more than 1000
             identifiers are specified.
+        UnexpectedResponseError: If the backend server responds with an
+            unexpected message.
     """
     user_manager = _get_auth_service(app).user_manager
     return user_manager.delete_users(uids, force_delete=force_delete)
