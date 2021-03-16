@@ -33,6 +33,7 @@ from firebase_admin import auth
 from firebase_admin import credentials
 from firebase_admin import exceptions
 from firebase_admin import _token_gen
+from firebase_admin import _auth_utils
 from tests import testutils
 
 
@@ -114,7 +115,7 @@ def _instrument_user_manager(app, status, payload):
     user_manager = auth_service.user_manager
     recorder = []
     user_manager._client.session.mount(
-        auth._AuthService.ID_TOOLKIT_URL,
+        _auth_utils.get_auth_resource_url(app.project_id),
         testutils.MockAdapter(payload, status, recorder))
     return user_manager, recorder
 

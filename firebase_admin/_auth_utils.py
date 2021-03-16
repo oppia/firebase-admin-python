@@ -15,6 +15,7 @@
 """Firebase auth utils."""
 
 import json
+import os
 import re
 
 import six
@@ -31,6 +32,7 @@ RESERVED_CLAIMS = set([
 ])
 VALID_EMAIL_ACTION_TYPES = set(['VERIFY_EMAIL', 'EMAIL_SIGNIN', 'PASSWORD_RESET'])
 
+_EMULATOR_HOST_ENV_VAR = 'FIREBASE_AUTH_EMULATOR_HOST'
 
 def validate_uid(uid, required=False):
     if uid is None and not required:
@@ -323,3 +325,33 @@ def _build_error_message(code, exc_type, custom_message):
         exc_type and hasattr(exc_type, 'default_message')) else 'Error while calling Auth service'
     ext = ' {0}'.format(custom_message) if custom_message else ''
     return '{0} ({1}).{2}'.format(default_message, code, ext)
+
+
+def emulator_host():
+    env_val = os.environ.get(_EMULATOR_HOST_ENV_VAR)
+    if env_val and '//' not in env_val:
+        return 'http://{0}/'.format(env_val)
+    return None
+
+
+def is_emulator_enabled():
+    return bool(emulator_host())
+
+
+def get_cookie_cert_url(version='v3'):
+    path = '/identitytoolkit/{0}/relyingparty/publicKeys'.format(version)
+    protocol = emulator_host() if is_emulator_enabled() else 'https://'
+    return '{0}www.googleapis.com{1}'.format(protocol, path)
+
+
+def get_id_token_cert_url(version='v1'):
+    path = '/robot/{0}/metadata/x509/securetoken@system.gserviceaccount.com'.format(version)
+    protocol = emulator_host() if is_emulator_enabled() else 'https://'
+    return '{0}www.googleapis.com{1}'.format(protocol, path)
+
+
+def get_auth_resource_url(project_id, tenant_id=None, version='v1'):
+    path = ('/{0}/projects/{1}'.format(version, project_id) if tenant_id is None else
+            '/{0}/projects/{1}/tenants/{2}'.format(version, project_id, tenant_id))
+    protocol = emulator_host() if is_emulator_enabled() else 'https://'
+    return '{0}identitytoolkit.googleapis.com{1}'.format(protocol, path)

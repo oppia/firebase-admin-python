@@ -14,6 +14,7 @@
 
 """Firebase token minting and validation sub module."""
 
+import calendar
 import datetime
 import time
 
@@ -21,6 +22,7 @@ import cachecontrol
 import requests
 import six
 from google.auth import credentials
+from google.auth import crypt
 from google.auth import iam
 from google.auth import jwt
 from google.auth import transport
@@ -34,12 +36,9 @@ from firebase_admin import _auth_utils
 
 # ID token constants
 ID_TOKEN_ISSUER_PREFIX = 'https://securetoken.google.com/'
-ID_TOKEN_CERT_URI = ('https://www.googleapis.com/robot/v1/metadata/x509/'
-                     'securetoken@system.gserviceaccount.com')
 
 # Session cookie constants
 COOKIE_ISSUER_PREFIX = 'https://session.firebase.google.com/'
-COOKIE_CERT_URI = 'https://www.googleapis.com/identitytoolkit/v3/relyingparty/publicKeys'
 MIN_SESSION_COOKIE_DURATION_SECONDS = int(datetime.timedelta(minutes=5).total_seconds())
 MAX_SESSION_COOKIE_DURATION_SECONDS = int(datetime.timedelta(days=14).total_seconds())
 
@@ -53,6 +52,18 @@ RESERVED_CLAIMS = set([
 ])
 METADATA_SERVICE_URL = ('http://metadata.google.internal/computeMetadata/v1/instance/'
                         'service-accounts/default/email')
+
+_CLOCK_SKEW_SECS = 10
+
+
+class _EmulatedSigner(crypt.Signer):
+
+    @property
+    def key_id(self):
+        return None
+
+    def sign(self, unused_message):
+        return b''
 
 
 class _SigningProvider(object):
@@ -91,6 +102,9 @@ class TokenGenerator(object):
 
     def _init_signing_provider(self):
         """Initializes a signing provider by following the go/firebase-admin-sign protocol."""
+        if _auth_utils.is_emulator_enabled():
+            return _SigningProvider(_EmulatedSigner(), 'firebase-auth-emulator@example.com')
+
         # If the SDK was initialized with a service account, use it to sign bytes.
         google_cred = self.app.credential.get_credential()
         if isinstance(google_cred, google.oauth2.service_account.Credentials):
@@ -217,7 +231,7 @@ class TokenVerifier(object):
             project_id=app.project_id, short_name='ID token',
             operation='verify_id_token()',
             doc_url='https://firebase.google.com/docs/auth/admin/verify-id-tokens',
-            cert_url=ID_TOKEN_CERT_URI,
+            cert_url=_auth_utils.get_id_token_cert_url(),
             issuer=ID_TOKEN_ISSUER_PREFIX,
             invalid_token_error=_auth_utils.InvalidIdTokenError,
             expired_token_error=ExpiredIdTokenError)
@@ -225,7 +239,7 @@ class TokenVerifier(object):
             project_id=app.project_id, short_name='session cookie',
             operation='verify_session_cookie()',
             doc_url='https://firebase.google.com/docs/auth/admin/verify-id-tokens',
-            cert_url=COOKIE_CERT_URI,
+            cert_url=_auth_utils.get_cookie_cert_url(),
             issuer=COOKIE_ISSUER_PREFIX,
             invalid_token_error=InvalidSessionCookieError,
             expired_token_error=ExpiredSessionCookieError)
@@ -254,6 +268,104 @@ class _JWTVerifier(object):
         self._invalid_token_error = kwargs.pop('invalid_token_error')
         self._expired_token_error = kwargs.pop('expired_token_error')
 
+    @property
+    def verify_id_token_msg(self):
+        return 'See {0} for details on how to retrieve {1}.'.format(self.url, self.short_name)
+
+    @property
+    def project_id_match_msg(self):
+        return ('Make sure the {0} comes from the same Firebase project as the service account '
+                'used to authenticate this SDK.'.format(self.short_name))
+
+    @property
+    def expected_issuer(self):
+        return self.issuer + self.project_id
+
+    def _decode_unverified(self, token):
+        try:
+            header = jwt.decode_header(token)
+            payload = jwt.decode(token, verify=False)
+            return header, payload
+        except ValueError as error:
+            raise self._invalid_token_error(str(error), cause=error)
+
+    def _verify_aud(self, payload):
+        audience = payload.get('aud')
+        if audience == FIREBASE_AUDIENCE:
+            raise self._invalid_token_error(
+                '{0} expects {1}, but was given a custom '
+                'token.'.format(self.operation, self.articled_short_name))
+        elif audience != self.project_id:
+            raise self._invalid_token_error(
+                'Firebase {0} has incorrect "aud" (audience) claim. Expected "{1}" but got "{2}". '
+                '{3} {4}'.format(self.short_name, self.project_id, audience,
+                                 self.project_id_match_msg, self.verify_id_token_msg))
+
+    def _verify_kid_and_alg(self, header, payload):
+        key_id = header.get('kid')
+        algorithm = header.get('alg')
+        if not key_id:
+            if algorithm == 'HS256' and payload.get('v') == 0 and 'uid' in payload.get('d', {}):
+                raise self._invalid_token_error(
+                    '{0} expects {1}, but was given a legacy custom '
+                    'token.'.format(self.operation, self.articled_short_name))
+            else:
+                raise self._invalid_token_error(
+                    'Firebase {0} has no "kid" claim.'.format(self.short_name))
+        elif algorithm != 'RS256':
+            raise self._invalid_token_error(
+                'Firebase {0} has incorrect algorithm. Expected "RS256" but got "{1}". '
+                '{2}'.format(self.short_name, algorithm, self.verify_id_token_msg))
+
+    def _verify_iss(self, payload):
+        issuer = payload.get('iss')
+        if issuer != self.expected_issuer:
+            raise self._invalid_token_error(
+                'Firebase {0} has incorrect "iss" (issuer) claim. Expected "{1}" but '
+                'got "{2}". {3} {4}'.format(self.short_name, self.expected_issuer, issuer,
+                                            self.project_id_match_msg, self.verify_id_token_msg))
+
+    def _verify_sub(self, payload):
+        subject = payload.get('sub')
+        if subject is None or not isinstance(subject, six.string_types):
+            raise self._invalid_token_error(
+                'Firebase {0} has no "sub" (subject) claim. '
+                '{1}'.format(self.short_name, self.verify_id_token_msg))
+        elif not subject:
+            raise self._invalid_token_error(
+                'Firebase {0} has an empty string "sub" (subject) claim. '
+                '{1}'.format(self.short_name, self.verify_id_token_msg))
+        elif len(subject) > 128:
+            raise self._invalid_token_error(
+                'Firebase {0} has a "sub" (subject) claim longer than 128 characters. '
+                '{1}'.format(self.short_name, self.verify_id_token_msg))
+
+    def _verify_iat_and_exp(self, payload):
+        issued_at = payload.get('iat')
+        expires_at = payload.get('exp')
+        now = calendar.timegm(datetime.datetime.utcnow().utctimetuple())
+        if not issued_at:
+            raise self._invalid_token_error('Token does not contain required claim "iat"')
+        elif not expires_at:
+            raise self._invalid_token_error('Token does not contain required claim "exp"')
+        elif now < issued_at - _CLOCK_SKEW_SECS:
+            raise self._invalid_token_error(
+                'Token used too early, {0} < {1}'.format(now, issued_at))
+        elif now > expires_at + _CLOCK_SKEW_SECS:
+            raise self._expired_token_error(
+                'Token expired, {0} < {1}'.format(expires_at, now), cause=None)
+
+    def _verify_token_signature(self, token, request):
+        try:
+            return google.oauth2.id_token.verify_token(
+                token, request=request, audience=self.project_id, certs_url=self.cert_url)
+        except google.auth.exceptions.TransportError as error:
+            raise CertificateFetchError(str(error), cause=error)
+        except ValueError as error:
+            if 'Token expired' in str(error):
+                raise self._expired_token_error(str(error), cause=error)
+            raise self._invalid_token_error(str(error), cause=error)
+
     def verify(self, token, request):
         """Verifies the signature and data for the provided JWT."""
         token = token.encode('utf-8') if isinstance(token, six.text_type) else token
@@ -270,82 +382,22 @@ class _JWTVerifier(object):
                 'GOOGLE_CLOUD_PROJECT environment variable.'.format(self.operation))
 
         header, payload = self._decode_unverified(token)
-        issuer = payload.get('iss')
-        audience = payload.get('aud')
-        subject = payload.get('sub')
-        expected_issuer = self.issuer + self.project_id
 
-        project_id_match_msg = (
-            'Make sure the {0} comes from the same Firebase project as the service account used '
-            'to authenticate this SDK.'.format(self.short_name))
-        verify_id_token_msg = (
-            'See {0} for details on how to retrieve {1}.'.format(self.url, self.short_name))
+        self._verify_aud(payload)
+        self._verify_iss(payload)
+        self._verify_sub(payload)
 
-        error_message = None
-        if audience == FIREBASE_AUDIENCE:
-            error_message = (
-                '{0} expects {1}, but was given a custom '
-                'token.'.format(self.operation, self.articled_short_name))
-        elif not header.get('kid'):
-            if header.get('alg') == 'HS256' and payload.get(
-                    'v') is 0 and 'uid' in payload.get('d', {}):
-                error_message = (
-                    '{0} expects {1}, but was given a legacy custom '
-                    'token.'.format(self.operation, self.articled_short_name))
-            else:
-                error_message = 'Firebase {0} has no "kid" claim.'.format(self.short_name)
-        elif header.get('alg') != 'RS256':
-            error_message = (
-                'Firebase {0} has incorrect algorithm. Expected "RS256" but got '
-                '"{1}". {2}'.format(self.short_name, header.get('alg'), verify_id_token_msg))
-        elif audience != self.project_id:
-            error_message = (
-                'Firebase {0} has incorrect "aud" (audience) claim. Expected "{1}" but '
-                'got "{2}". {3} {4}'.format(self.short_name, self.project_id, audience,
-                                            project_id_match_msg, verify_id_token_msg))
-        elif issuer != expected_issuer:
-            error_message = (
-                'Firebase {0} has incorrect "iss" (issuer) claim. Expected "{1}" but '
-                'got "{2}". {3} {4}'.format(self.short_name, expected_issuer, issuer,
-                                            project_id_match_msg, verify_id_token_msg))
-        elif subject is None or not isinstance(subject, six.string_types):
-            error_message = (
-                'Firebase {0} has no "sub" (subject) claim. '
-                '{1}'.format(self.short_name, verify_id_token_msg))
-        elif not subject:
-            error_message = (
-                'Firebase {0} has an empty string "sub" (subject) claim. '
-                '{1}'.format(self.short_name, verify_id_token_msg))
-        elif len(subject) > 128:
-            error_message = (
-                'Firebase {0} has a "sub" (subject) claim longer than 128 characters. '
-                '{1}'.format(self.short_name, verify_id_token_msg))
+        if _auth_utils.is_emulator_enabled():
+            # NOTE: `_verify_token_signature` handles `iat` and `exp` verification as a byproduct,
+            # but we do not want to check signatures while running in emulator-mode so we explicitly
+            # check `iat` and `exp` ourselves instead.
+            self._verify_iat_and_exp(payload)
+        else:
+            self._verify_kid_and_alg(header, payload)
+            self._verify_token_signature(token, request)
 
-        if error_message:
-            raise self._invalid_token_error(error_message)
-
-        try:
-            verified_claims = google.oauth2.id_token.verify_token(
-                token,
-                request=request,
-                audience=self.project_id,
-                certs_url=self.cert_url)
-            verified_claims['uid'] = verified_claims['sub']
-            return verified_claims
-        except google.auth.exceptions.TransportError as error:
-            raise CertificateFetchError(str(error), cause=error)
-        except ValueError as error:
-            if 'Token expired' in str(error):
-                raise self._expired_token_error(str(error), cause=error)
-            raise self._invalid_token_error(str(error), cause=error)
-
-    def _decode_unverified(self, token):
-        try:
-            header = jwt.decode_header(token)
-            payload = jwt.decode(token, verify=False)
-            return header, payload
-        except ValueError as error:
-            raise self._invalid_token_error(str(error), cause=error)
+        payload['uid'] = payload['sub']
+        return payload
 
 
 class TokenSignError(exceptions.UnknownError):

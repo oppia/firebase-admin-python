@@ -579,8 +579,6 @@ def _check_jwt_revoked(verified_claims, exc_type, label, app):
 class _AuthService(object):
     """Firebase Authentication service."""
 
-    ID_TOOLKIT_URL = 'https://identitytoolkit.googleapis.com/v1/projects/'
-
     def __init__(self, app):
         credential = app.credential.get_credential()
         version_header = 'Python/Admin/{0}'.format(firebase_admin.__version__)
@@ -591,9 +589,13 @@ class _AuthService(object):
             2. set the project ID explicitly via Firebase App options, or
             3. set the project ID via the GOOGLE_CLOUD_PROJECT environment variable.""")
 
+        headers = {'X-Client-Version': version_header}
+        if _auth_utils.is_emulator_enabled():
+            headers['Authorization'] = 'Bearer owner'
+
         client = _http_client.JsonHttpClient(
-            credential=credential, base_url=self.ID_TOOLKIT_URL + app.project_id,
-            headers={'X-Client-Version': version_header})
+            credential=credential, base_url=_auth_utils.get_auth_resource_url(app.project_id),
+            headers=headers)
         self._token_generator = _token_gen.TokenGenerator(app, client)
         self._token_verifier = _token_gen.TokenVerifier(app)
         self._user_manager = _user_mgt.UserManager(client)
